@@ -1,0 +1,151 @@
+---
+title: "Application of linear mixed effects models with R"
+author: "wangbinzjcc@qq.com"
+date: "Wednesday, January 21, 2015"
+output: 
+  ioslides_presentation:
+        logo: F:/rmarkdown/gxib0.png
+--- 
+```{r aa,include=FALSE}
+  require(knitr)
+ opts_chunk$set(cache=F, results='markup',message=F, echo=T,out.width=50,out.height=50, fig.align='center',size='tiny' ,split=T)
+```
+
+## 数据介绍
+```{r summary.data}
+dat <- read.csv("leaf n-p-np.csv")
+head(dat,3)
+table(dat$site)
+```
+site是9个采样地点, 分别为a,b,c,d,e,f,g,h,i等地点(每个地点又有2或3个重复). fg是不同林层类型的样地, 分类为G,S,T. leg是样地内有无豆科植物, 分类为L,N. 
+
+## 数据介绍
+![](aaa.jpg)
+
+## 传统方差分析
+```{r anova1}
+a1 <- aov(p ~ 1 + fg , dat); summary(a1)
+a2 <- aov(np ~ 1 + fg , dat); summary(a2)
+```
+**结果: 不同林层fg对P值影响为p=0.043, 对NP值影响为p<0.001.**
+
+## 方差分析与回归模型的关系
+```{r anovaVSmodel}
+lm1 <- lm(p ~ 1 + fg, dat)
+summary(lm1)$fstatistic
+```
+回归分析结果**summary(lm1)**最后一行显示:  
+F=3.201, df1=2, df2=172, p=0.043.     
+这和方差分析**summary(a1)**结果是一致的.
+
+## 加随机因子的方差分析
+```{r anova2}
+e1 <- aov(p ~ 1 + fg + Error(site),dat); summary(e1)
+```
+在同一地点site采的样品, 数据可能是假重复.  
+把地点site做为随机因子加入方差分析模型, 结果更可靠.  
+`结果:` fg对P值的影响不显著(p=0.614).  
+
+`分层线性模型与带随机因子的方差分析相似, 但功能强大的多.`
+
+## 分层线性模型 
+**零模型(fm0):** 假设在排除随机因子site后, NP值残差在平均值(截距Intercept)周围呈正态分布.   
+
+**模型1 (fm1):** 在零模型的基础上加入了林层类型因子fg.
+```{r LMM model NP}
+require(lme4)
+fm0 <- lmer(np ~ 1 + (1|site), dat, REML=FALSE)
+fm1 <- lmer(np ~ 1 + fg + (1|site), dat, REML=FALSE)
+```
+
+## 分层线性模型  
+使用方差分析**anova(fm0, fm1)**比较fm1与fm0之间的差异.  
+`结果:` fm1显著优于fm0 (AIC, BIC值更小, p=2.28e-05<0.001).
+```{r LMM model anova}
+anova(fm0, fm1)
+```  
+
+## summary(fm0)的含义
+**固定效应Fixed effects(固定解释部分):**  
+截距Intercept参数Estimate为14.734, 
+标准差Std.Dev为1.360.   
+
+**随机效应Random effects(模型总残差):**  
+随机截距site(Intercept)标准差为3.967,   
+残差Residual标准差为4.072.
+```{r LMM model summ1}
+summary(fm0)$coefficients ## Fixed effects
+summary(fm0)$varcor ## Random effects
+```
+
+## summary(fm1)的含义
+**固定效应Fixed effects:**   
+Intercept参数为14.739, fgSd 参数为9.309, fgT参数为9.491.  
+**随机效应Random effects:**    
+residual标准差为4.065, site(Intercept)标准差为0.8631.
+```{r LMM model summ2}
+summary(fm1)$coefficients ## Fixed effects
+summary(fm1)$varcor ## Random effects
+```
+## fm0与fm1的结果比较
+比较**summary(fm0)**与**summary(fm1)**发现:   
+
+fm0零模型中随机效应site(Intercept)标准差3.968, 部分被fm1模型中固定效应fg因子所解释.    
+因此, fm1模型中随机效应site(Intercept)因子标准差变为0.863.
+
+## 分层线性模型 
+```{r LMM model NP2}
+fm2 <- lmer(np ~ 1 + fg + leg + (1|site), dat, REML=FALSE)
+anova(fm1, fm2)
+# fm3 <- lmer(np ~ 1 + fg + leg + (1+fg|site) ,dat, REML=FALSE)
+# fm4 <- lmer(np ~ 1 + fg + leg + (1+leg|site) ,dat, REML=FALSE)
+# anova(fm2, fm3)
+# anova(fm2, fm4)
+```
+
+## 分层线性模型 
+使用方差分析**anova(fm1, fm2)**比较fm1与fm2之间的差异.  
+`结果:` fm2显著优于fm1 (AIC, BIC值更小, p=2.747e-07<0.001).
+
+使用更复杂的随机效应得到模型fm3和fm4, 
+但他们并不能显著优于fm2. (p>0.1)
+
+因此, np ~ 1 + fg + leg + (1|site) 为最佳模型. 即NP受到固定效应fg, leg和随机效应(1|site)的显著影响.
+
+## 模型的名称
+线性混合效应模型 (linear mixed-effects models)   
+多层次线性模型 (hierarchical linear models)   
+多水平线性模型 (multilevel linear models)   
+随机系数回归模型 (random coefficient regression models)   
+
+## 多层次线性模型的例子  
+从中国抽样出50个城市,再抽样出180个学校,再抽样出1000名学生。 
+
+学校层面: 每个学校可根据学生**入学考试**与**毕业成绩**建立一个回归方程,共可得到180个“第一层回归模型”。假设这180个学校的内外部环境绝对相同，那么这180组回归系数也应该相同而方差为0。但实际上由于种种内外部环境差异，不同学校得到的“第一层回归模型”系数会有不同。  
+
+## 多层次线性模型的例子  
+城市层面:假设同一城市有不同学校。而这些学校由于各种影响因子的作用，“第一层回归模型”系数会有不同。根据中心极限定理，假设认为“第一层回归模型”系数受到的总影响因子服从正态分布，可以计算出中“学校间”的“总影响因子”处于平均水平时的回归方程系数及误差。这样就消除了城市内部层面上的噪声影响，建立了50个城市层面上的“第二层回归模型”。
+
+## 多层次线性模型的例子  
+国家层面:假设不同城市的“第二层回归模型”系数，受到不同城市间的总影响因子服从正态分布，可以计算出“城市间”的“总影响因子”处于平均水平时的回归方程系数及误差。这样就消除了“国家内部城市间”层面上的噪声影响，建立了国家层面上的“第三层回归模型”。
+
+
+#  完
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

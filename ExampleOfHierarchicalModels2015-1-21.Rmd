@@ -1,0 +1,220 @@
+---
+title: "多层次线性模型的例子"
+author: "wangbinzjcc@qq.com"
+date: "Wednesday, January 21, 2015"
+output: ioslides_presentation
+---
+```{r aa,include=FALSE}
+  require(knitr)
+ opts_chunk$set(cache=T)
+  require(lme4)
+```
+## 模型的名称
+线性混合效应模型 (linear mixed-effects models)   
+多层次线性模型 (hierarchical linear models)   
+多水平线性模型 (multilevel linear models)   
+随机系数回归模型 (random coefficient regression models)   
+
+## 多层次线性模型的例子
+从中国抽样出200个城市,再抽样出1800所学校,再抽样出100000名学生,来分析中国小学生**入学考试成绩**与**毕业考试成绩**之间的关系(假设是线性关系)。  
+由于每个城市的规模大小与文化实力、每所学校的规模大小与师资力量、每名学生的知识基础与兴趣偏好等均不相同，因此这种线性关系在不同层面上的结果可能各不相同。
+
+## 多层次线性模型的例子
+`学校层面:` 每个学校可根据学生**入学考试**与**毕业成绩**建立一个回归方程,共可得到1800个“第一层回归模型”。如果假设这1800个学校的内外部环境绝对相同，那么这1800组回归系数也应该相同而方差为0。但实际上由于种种内外部环境差异，不同学校得到的“第一层回归模型”系数将各不相同。    
+`城市层面:`假设同一城市内有不同学校，这些学校受到了各种影响因子的综合作用。根据中心极限定理，可假设认为同一城市内的“第一层回归模型”系数受到的总影响因子服从正态分布。当我们拟合出这些正态曲线，就能计算出当城市内“学校层面”的“影响因子”处于平均水平时的那个“第一层回归模型”的系数及误差。这样就能成功消除城市内“学校层面”的“影响因子”，即建立了200个“城市层面”上的“第二层回归模型”。    
+`国家层面:`假设不同城市的“第二层回归模型”系数，受到的“城市层面”上“总影响因子”服从正态分布。当我们拟合出这些正态曲线，就能计算出“城市层面”的“总影响因子”处于平均水平时的那个“第二层回归模型”的系数及误差。这样就消除了“城市层面”上的“影响因子”，建立了国家层面上的“第三层回归模型”。
+
+## 多层次线性模型的例子
+根据这三个层面回归模型的系数及误差，可以回答   
+1. 国家层面: 在中等层次城市内的中等层次学校，学生**入学考试成绩**与**毕业考试成绩**之间的回归关系，即“第三层回归模型”的系数及误差。   
+2. 城市层面: 城市层面的影响因子对结果的影响及解释度有多大。   
+3. 学校层面: 学校层面的影响因子对结果的影响及解释度有多大。   
+
+## R语言: 多层次线性模型的数据
+```{r }
+set.seed(1)
+n_student=100000
+n_school=1800
+n_cities=100
+x <- origExam <- rnorm(n=n_student, mean=0)
+schools <- sample(x = rnorm(n=n_school, mean =1, sd = 2),
+                  size = n_student, replace = T)
+sch.fact <- cit.fact <- cities <- factor(schools)
+levels(sch.fact) <- 1:n_school 
+#
+nam.site <- sample(1:n_cities, n_school, replace = T)
+levels(cit.fact) <- levels(cities) <- nam.site
+levels(cities) <- rnorm(n = n_cities,mean = 10,sd = 8)
+cities <- as.numeric(as.character(cities))
+#
+sigma <- rnorm(n=n_student,mean = 0,sd =5)
+#
+X0 <- data.frame(origExam, sch.fact, cit.fact, sigma,
+                 schools, cities)
+```
+
+## R语言: 多层次线性模型的数据
+```{r }
+Do.plot.fun <- function(){
+ coef.lm <- sapply(sample(levels(sch.fact), size = 500),
+         function(i){lm(y[sch.fact==i]~x[sch.fact==i])$coef})
+ layout(mat = matrix(data = c(1,1,2,3), nrow = 2),
+        heights = c(2,2), widths = c(2,1) )
+ par(mar=c(5,5,3,0.8),mex=0.7)
+    plot(x,y,xlab='origExam',ylab='graduExam')
+ sapply( 1:150, function(i){  
+      abline(a=coef.lm[1,i], b=coef.lm[2,i], col=sample(0:8,1))})
+      abline(v=0,col=4)
+    hist(coef.lm[1,],breaks = 50, xlab='Intercepts of Linear Models',
+       main=paste('sd =',round(sd(coef.lm[1,]),4)))
+    hist(coef.lm[2,], breaks = 50, xlab='Slopes of Linear Models',
+       main=paste('sd =',round(sd(coef.lm[2,]),4)))
+       }
+```
+
+## R图形: 零模型 
+ graduExam 与 origExam 的简单线性回归。
+```{r }
+y <- graduExam <- 5 + (10*cities)  + sigma
+Do.plot.fun()
+```
+
+## R统计: 零模型
+ graduExam 与 origExam 的简单线性回归。
+```{r }
+y <- graduExam <- 5 + (10*cities)  + sigma
+paste("Mean(Intercept:)", round(5 + mean(10*cities),4))
+lm0 <- lm(y~ 1); summary(lm0) 
+fm0 <- lmer(y ~ 1 + (1|cit.fact)); summary(fm0)
+```
+
+
+## R图形: 简单一元线性回归
+ graduExam 与 origExam 的简单线性回归。
+```{r }
+y <- graduExam <- 5 + 30*origExam  + sigma
+Do.plot.fun()
+```
+
+## R统计: 简单一元线性回归
+ graduExam 与 origExam 的简单线性回归。
+```{r }
+y <- graduExam <- 5 + 30*origExam  + sigma
+lm1 <- lm(y~x); summary(lm1)
+fm1 <- lmer(y ~ 1 + x + (1|cit.fact)); summary(fm1)
+```
+
+## R图形:  随机截距一元线性回归
+**截距**受(cities因子)影响后, 不同学校graduExam与origExam的线性回归。
+```{r }
+y <- graduExam <- 5 + (10*cities) + 30*origExam + sigma
+Do.plot.fun()
+```
+
+## R统计:  随机截距一元线性回归
+**截距**受(cities因子)影响后, 不同学校graduExam与origExam的线性回归。
+```{r }
+y <- graduExam <- 5 + (10*cities) + 30*origExam + sigma
+paste("Mean(Intercepts:)", round(5+mean(10*cities)))
+lm2 <- lm(y~x); summary(lm2)
+fm2 <- lmer(y ~ 1 +x+ (1|cit.fact)); summary(fm2)
+```
+
+## R图形:  随机斜率一元线性回归
+**斜率**受(cities因子)影响后, 不同学校graduExam与origExam的线性回归。
+```{r }
+y <- graduExam <- 5 + (30+5*cities)*origExam + sigma
+Do.plot.fun()
+```
+
+## R统计: 随机斜率一元线性回归
+**斜率**受(cities因子)影响后, 不同学校graduExam与origExam的线性回归。
+```{r }
+y <- graduExam <- 5 + (30+5*cities)*origExam + sigma
+paste("Mean(Slopes):", round(30+mean(5*cities),4))
+lm3 <- lm(y~x); summary(lm3)
+fm3 <- lmer(y ~ 1 + x + (0+x|cit.fact)); summary(fm3)
+```
+
+## R图形: 随机截距+斜率一元线性回归
+**截距和斜率**都受(cities因子)影响后, 不同学校graduExam与origExam的线性回归。
+```{r }
+y <- graduExam <- (5 + 10*cities) + (30+5*cities)*origExam + sigma
+Do.plot.fun()
+```
+
+## R统计: 随机截距+斜率一元线性回归
+截距受cities和cities因子影响, 斜率受cities因子影响后,
+不同学校graduExam与origExam的线性回归。
+```{r }
+y <- graduExam <- (5 + 10*cities) + (30+5*cities)*origExam + sigma
+paste("Mean(Intercepts):", round(5+mean(10*cities),4))
+paste("Mean(Slopes):", round(30+mean(5*cities),4))
+lm4 <- lm(y~x); summary(lm4)
+fm4 <- lmer(y ~ 1 + x + (1+x|cit.fact)); summary(fm4)
+```
+
+################################
+
+## R统计: 多元线性回归
+  y ~ x1 + x2 的多元线性回归。
+```{r }
+x1 <- origExam; x2 <- schools
+y <- graduExam <- 5 + 30*x1 + 0.001*x2 + sigma
+lm1 <- lm(y~x1+x2); summary(lm1)
+fm0 <- lmer(y ~ 1 + x1 + (1|cit.fact),REML = F);
+fm1 <- lmer(y ~ 1 + x1 + x2 + (1|cit.fact),REML = F); 
+anova(fm0, fm1)
+summary(fm1)
+```
+
+## R统计: 随机截距 多元线性回归
+**截距**受(cities因子)影响后, y ~ x1 + x2 的多元线性回归。
+```{r }
+x1 <- origExam; x2 <- schools
+y <- graduExam <- 5 + (10*cities)+ 30*x1 + 0.001*x2 + sigma
+paste("Mean(Intercepts:)", round(5+mean(10*cities), 4))
+lm2 <- lm(y~x1+x2); summary(lm2)
+fm0 <- lmer(y ~ 1 + x1 + (1|cit.fact),REML = F)
+fm1 <- lmer(y ~ 1 +x1+x2+ (1|cit.fact),REML = F)
+anova(fm0, fm1)
+summary(fm1)
+```
+
+## R统计:  随机斜率 多元线性回归
+**斜率**受(cities因子)影响后, 不同学校graduExam与origExam的线性回归。
+```{r }
+x1 <- origExam; x2 <- schools
+y <- graduExam <- 5 + (30+5*cities)*x1 + 13*x2 + sigma
+paste("Mean(Slopes):", round(30+mean(5*cities),4))
+lm3 <- lm(y~ 1 + x1 + x2); summary(lm3)
+fm3 <- lmer(y ~ 1 + x1 + x2 + (0+x1|cit.fact)); summary(fm3)
+```
+
+## R统计: 随机截距+斜率 多元线性回归
+**截距和斜率**都受(cities因子)影响后, 不同学校graduExam与origExam的线性回归。
+```{r }
+x1 <- origExam; x2 <- schools
+y <- graduExam <- (5 + 10*cities) + 3*x2+ (30+5*cities)*x1 + sigma
+paste("Mean(Intercepts):", round(5+mean(10*cities),4))
+paste("Mean(Slopes):", round(30+mean(5*cities),4))
+lm4 <- lm(y~1+x1+x2); summary(lm4)
+fm4 <- lmer(y ~ 1 + x1 + x2 + (1+x1|cit.fact)); summary(fm4)
+```
+ 
+## 啥时多层次模型会比简单模型好？
+当无法用文字清晰表述出野外经验时，需要设计随机实验把监测数据记录下来。
+当监测数据过于繁多而凌乱时，需要借助计算机图形使其形象化。
+当计算机图形变化万千而不知为何物时，需要借助统计学来凸显其中趋势。
+当统计结果若有若无时隐时现时，需要借助数学公式使其简化明了。
+当数学公式神秘具体但抽象空洞时，需要野外经验赋予其实际意义。
+ 
+## 啥时多层次模型会比简单模型好？
+
+
+请听下回分解
+
+
+#（完）
+
+ 
