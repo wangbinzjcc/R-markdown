@@ -1,0 +1,159 @@
+\documentclass[8pt]{beamer}
+\usepackage{ctex}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{footline}[frame number]
+\setbeamerfont{page number in head/foot}{size=\large}
+\begin{document}
+
+<<aa,include=FALSE>>=
+  require(knitr)
+ opts_chunk$set(cache=F, results='markup',message=F, echo=T,out.width=150,out.height=120, fig.align='center',size='tiny' ,split=T)
+@
+   
+  %%%%%%%%%%%%%%%%%%%    %%%%%%%%%%%%%%%%%%%
+  
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\title{\Large 多层线性模型的应用\\ 检测不同地点CNP的差异性}
+\author{\Large wangbinzjcc@qq.com}
+\date{\today}
+
+\begin{frame}[plain]
+\titlepage
+\end{frame}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{frame}[plain]
+\includegraphics[width=0.6\textwidth]{aaa.jpg}
+<<summary.data>>=
+dat <- read.csv("leaf n-p-np.csv")
+head(dat,3)
+table(dat$site)
+@
+分别在a,b,c,d,e,f,g,h,i�?个地点site采样（每个地点有2�?个重复）。fg是不同林层物种，分类为G,S,T。leg是有无豆科植物，分类为L,N�?
+\end{frame}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{frame}{传统方差分析}
+<<anova1>>=
+a1 <- aov(p ~ 1 + fg , dat)
+summary(a1)
+a2 <- aov(np ~ 1 + fg , dat)
+summary(a2)
+@
+用传统的方差分析方差，结果：不同林层fg对P含量的影响（p=0.0431）�?
+不同林层fg对NP含量的影响（p<0.001）�?
+\end{frame}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{frame}{方差分析与回归模型的关系}
+<<anovaVSmodel>>=
+a2 <- aov(np ~ 1 + fg, dat)
+# summary(a2)
+lm1 <- lm(np ~ 1 + fg, dat)
+summary(lm1)
+@
+其实线性模型与方差分析是相似的�?
+如，summary(lm1)的最后一行显示，F=66.17，df1=2，df2=172，p<2.2e-16。这个结果和方差分析summary(a2)结果是一致的�?
+
+\end{frame}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{frame}{加随机因子的方差分析}
+<<anova2>>=
+e1 <- aov(p ~ 1 + fg + Error(site),dat)
+summary(e1)
+e2 <- aov(np ~ 1 + fg + Error(site),dat)
+# summary(e2)
+@
+在同一地点site采的样品，数据可能是假重复。把地点site做为随机因子加入方差分析模型中，结果更可靠。如，加入随机因子site后的方差分析结果：fg对P值的影响不显�?p=0.614)�?
+\\ \Large\textbf{多层线性模型与带随机因子的方差分析是相似的!但功能强大的�?}
+\end{frame}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{frame}{多层线性模�?- NP}
+<<LMM model NP>>=
+require(lme4)
+fm0 <- lmer(np ~ 1 + (1|site), dat, REML=FALSE)
+fm1 <- lmer(np ~ 1 + fg + (1|site), dat, REML=FALSE)
+anova(fm0, fm1)
+@
+fm0为零模型，含义为: 在排除随机因子site后，NP值的残差在截�?常数Intercept)的上下正态分布�?
+\\ fm1为目标模型，在零模型的基础上加入了林层类型fg�?
+\\ 使用方差分析anova(fm0,fm1)比较fm1与fm0之间的差异。结果为�?
+fm1显著优于fm0（AIC,BIC值更�?p=2.28e-05<0.0001）�?
+\end{frame}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{frame}{多层线性模�?- summary(fm0)的含义}
+<<LMM model summ1>>=
+fm0 <- lmer(np ~ 1 + (1|site), dat, REML=FALSE)
+summary(fm0)
+@
+summary(fm0)的含义：
+\\ Random effects:随机效应中，residual的标准差�?.072，随机截距site(Intercept)的标准差�?.968�?
+\\ Fixed effects:固定效应中，截距(Intercept)的参数值Estimate�?4.735�?
+\\ 注：固定效应为模型可被解释的部分。随机效应为模型不能被解释的部分（即残差）�?
+\end{frame}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{frame}{多层线性模�?- summary(fm1)的含义}
+<<LMM model summ2>>=
+fm1 <- lmer(np ~ 1 + fg + (1|site), dat, REML=FALSE)
+summary(fm1)
+@
+\end{frame}
+
+\begin{frame}{多层线性模�?- summary(fm1)的含义}
+summary(fm1)的含义：
+\\ Random effects:随机效应(残差)中，residual的标准差�?.065，随机截距site(Intercept)的标准差�?.8631�?
+\\ Fixed effects:固定效应中，截距(Intercept)的参数值Estimate�?4.739，fgS是参数值为9.309，fgT是参数值为9.491�?
+\\ 比较fm0与fm1发现：fm0模型中随机效应site(Intercept)因子的标准差3.968，被fm1模型中固定效应fg因子所解释。因此，fm1模型中随机效应site(Intercept)因子的标准差变为0.863�?
+\end{frame}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{frame}{多层线性模�?- NP}
+<<LMM model NP2>>=
+fm2 <- lmer(np ~ 1 + fg + leg + (1|site), dat, REML=FALSE)
+anova(fm1, fm2)
+fm3 <- lmer(np ~ 1 + fg + leg + (1+fg|site) ,dat, REML=FALSE)
+fm4 <- lmer(np ~ 1 + fg + leg + (1+leg|site) ,dat, REML=FALSE)
+anova(fm2, fm3)
+anova(fm2,fm4)
+@
+\end{frame}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{frame}{多层线性模�?- NP}
+\\比较fm1与fm2之间的差异。结果为�?
+fm2显著优于fm1（AIC,BIC值更�?p=2.747e-07<0.0001）�?
+\\使用更复杂的随机效应得到模型fm3和fm4，但他们并不能显著优于fm2�?
+因此，np ~ 1 + fg + leg + (1|site) 为最佳模型。即NP受到固定效应fg,leg和随机效�?1|site)的显著影响�?
+\end{frame}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{frame}{多层线性模�?- P}
+<<LMM model P>>=
+fmP0 <- lmer(p ~ 1 + (1|site), dat, REML=FALSE)
+fmP1 <- lmer(p ~ 1 + fg + (1|site), dat, REML=FALSE)
+fmP2 <- lmer(p ~ 1 + leg + (1|site), dat, REML=FALSE)
+anova(fmP0, fmP1)
+anova(fmP0, fmP2)
+@
+使用模型分析P的影响因子，结果发现：加入fg,leg后的模型fmP1,fmP2,他们并不能显著优于零模型。因此fg和leg对P的影响不显著�?
+\end{frame}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+\end{document}
+

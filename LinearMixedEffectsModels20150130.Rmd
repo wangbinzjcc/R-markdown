@@ -1,0 +1,221 @@
+---
+title: "为什么混合效应模型能处理非独立型数据？"
+author: "wangbinzjcc@qq.com"
+date: "Saturday, January 24, 2015"
+output: html_document
+---
+
+##  为什么数据独立性那么重要？
+独立性是指像随机抛硬币事件那样，前后两次事件结果之间互不干扰的性质.    
+因此，如果重复抛硬币10000次，出现概率较大的情况是，50%左右为正面，50%左右为反面.  
+但是如果数据之间不独立，比如同一次实验结果被连续重复的记录了2000次，这种重复记录的行为，势必会影响实验的结果，造成较大误差. 再比如，如果仅做了10次实验，每次实验结果却被重复记录了1000次数据，这样所得到的10000个数据的自由度实际上也只有10-1=9，而不是10000-1=9999，因此基于自由度为9999的各种检验将会毫无意义.  
+
+## R语言: 多层次嵌套结构的数据
+某省，抽取17个城市，99所学校，10000名学生，进行体能调查.  
+cit.fact为城市名称，sch.fact为学校名称，sex.fact为性别.  
+city.scores为城市综合实力，school.scores为学校综合实力，sex.boy是否为男生.  
+x0为入学时学生的体能测试成绩.  
+y0为毕业时学生的体能测试成绩.  
+```{r }
+set.seed(1); n_student=10000; n_school=99; n_cities=13
+###
+school.scores <- sample(x=rnorm(n=n_school, mean=0, sd = 20), size=n_student, replace=T)
+sch.fact <- factor(school.scores);
+levels(sch.fact) <- paste('sch', sample(1:n_school), sep='')
+#
+stud.sex.prob <- factor(sch.fact)
+levels(stud.sex.prob) <- runif(n=n_school, min=0.4, max=1) 
+stud.sex.prob <- as.numeric(as.character(stud.sex.prob))
+FUN <- function(i){sample(x = c('boy', 'girl'), size = 1, replace = T, 
+                  prob = c(stud.sex.prob[i], 1-stud.sex.prob[i]))}
+sex.fact  <- sapply(1:n_student, FUN )
+sex.boy <- as.numeric(sex.fact =='boy')
+#
+cit.fact <- factor(sch.fact)
+levels(cit.fact) <- sample(rnorm(n=n_cities, mean=0, sd=20), 
+                           size=n_school, replace=T,
+                           prob =runif(n=n_cities, min=0.3, max=1));
+city.scores <- as.numeric(as.character(cit.fact));
+levels(cit.fact) <-  paste('cit',sample(1:n_cities),sep='')
+###
+school.scores <- scale(school.scores)
+city.scores   <- scale(city.scores) 
+sex.boy       <- scale(sex.boy)
+sigma <- rnorm(n=n_student, mean = 0, sd =3)
+x1 <- sex.fact; x2 <- sch.fact; x3 <- cit.fact
+x0 <- origPhysicalExam <- rnorm(n=n_student, mean=0)
+#
+y0 <- 51+ 0.5 * sex.boy + (20 * city.scores) + (7 * school.scores) + 
+      (3+ 5 * city.scores + 7 * school.scores) * x0 + sigma
+```
+
+## 最理想的数据来自于独立同分布
+最理想的取样数据为，每个数据都来自同一随机分布总体且彼此间相互独立.
+```{r }
+y0 <- 53 +3 * x0 + sigma
+plot(x0, y0)
+lm0 <- lm(y0~x0)
+abline(lm0, col=2,lwd=3)
+abline(v=0,col=3)
+summary(lm0)
+```
+
+## 数据的非独立性造成了结果的偏差
+如果数据不能满足独立性的假设，将会对结果造成偏差.  
+比如，y1[1:3000]过分依赖y0[1]，而y1[4001:7000]过分依赖y0[2].  
+最终导致了回归模型发生较大偏差.  
+```{r }
+y1 <- y0; 
+y1[1:3000]    <- rnorm(n = 3000, mean = y0[1]); 
+y1[4001:7000] <- rnorm(n = 3000, mean = y0[2])
+lm1 <- lm(y1~x0)
+plot(x0,y1)
+abline(lm0, col=2,lwd=3)
+abline(lm1, col=4,lwd=3)
+abline(v=0, col=3)
+summary(lm1)
+```
+
+## 剔除非独立性的数据导致自由度降低
+如果剔除掉不独立的数据，则回归模型回到理论水平.  
+但付出的代价是自由度由9998降低为3998.
+```{r }
+y2 <- y1[-c(1:3000,4001:7000)]
+x2 <- x0[-c(1:3000,4001:7000)]
+lm2 <- lm(y2~x2)
+plot(x2,y2)
+abline(lm0, col=2,lwd=5)
+abline(lm2, col=3,lwd=2)
+summary(lm2)
+```
+
+## 自由度降低可导致“弃真型”错误
+如果自由度降低到数值过小，会导致一些实际有显著影响的因子无法被检测出来.
+如自由度为99时，sex3影响因子的检测结果为不显著。
+```{r }
+y0 <- 53 + 3 * x0 +  0.4 * sex.boy + sigma
+y3 <- y0[1:100]
+x3 <- x0[1:100]
+sex3 <- sex.boy[1:100]
+lm1 <- lm(y0~x0+sex.boy); summary(lm1)
+lm2 <- lm(y3~x3+sex3); summary(lm2)
+```
+
+## 数据非独立性的情况很常见
+如每个城市的综合实力严重影响了y0. 那么同一个城市内数据就是非独立性数据.
+```{r }
+y0 <- 53 + 3 * x0 + 0.5*sex.boy + 50 * city.scores + sigma
+#
+index.cit <- as.numeric( gsub('cit([0-9]{1,2})','\\1',cit.fact) )
+cit.order <- reorder(x=cit.fact, X=index.cit )
+#
+boxplot(y0~cit.order, xlab='cit.fact')
+```
+
+## 非独立性数据导致简单回归模型系数出现偏差
+如果我们没有考虑着不同城市cit.fact之间的差异. 则回归结果可能会出现偏差.
+```{r }
+plot(x0, y0)
+lm0 <- lm(y0~x0+sex.boy);  summary(lm0)
+abline(lm0, col=2,lwd=4) 
+```
+
+##  最好的理想的回归结果
+当然了，如果我们能够精确量化每个城市的综合影响因子city.scores, 那么回归结果是再好不过了.
+```{r }
+lm0 <- lm(y0~x0+sex.boy+city.scores);  summary(lm0)
+```
+
+## 补救措施之一，哑变量
+但是，实际上要精确的量化每个城市的综合影响因子city.scores是太不可能的，如果把不同城市cit.fact作为哑变量加入模型，则回归结果将会好很多，但是模型参数太多，且截距误差太大(意义不明确).
+```{r }
+lm1 <- lm(y0~x0+sex.boy+cit.fact);  summary(lm1)
+```
+
+## 随机因子的意义
+如果把不同城市cit.fact作为随机因子加入混合效应模型(linear mixed-effects models)，则回归结果的意义将更加明确.  
+得到，当cit.fact随机因子位于平均值时，回归模型的固定及随机效应的结果.  
+固定部分: Intercept参数为51.45，标准误为5.464; x0参数为2.98,标准误为0.02; sex.boy参数为0.5,标准差为0.03.   
+随机部分: cit.fact能解释随机斜距的19.703个残差标准误，剩余残差Residual为2.992个残差标准误.   
+对比发现，模型fm0显著优于fm.
+```{r }
+require(lme4)           
+fm  <- lmer(y0~1+x0 +(1|cit.fact), REML=F)
+fm0 <- lmer(y0~1+x0+sex.boy+(1|cit.fact), REML=F);  summary(fm0)
+anova(fm,fm0)
+```
+
+## 两个随机因子加入模型
+把不同城市cit.fact，不同学校sch.fact作为随机因子加入混合效应模型中.
+```{r }
+##
+y0 <- 53 + 3 * x0 + 0.5*sex.boy + 50 * city.scores +
+      7 * school.scores + sigma
+##
+index.sch <- as.numeric( gsub('sch([0-9]{1,2})','\\1',sch.fact) )
+sch.order <- reorder( x=paste(sch.fact, sex.fact), 
+               X=index.sch )
+##
+par(mar=c(5,4,1,1), mgp=c(4,0.5,0),tck=-0.02)
+boxplot(y0 ~ sch.order, xlim=c(1,21.7), las=2, 
+        col=c(2,4), xlab='school + sex')
+title(ylab="graduate physical exam",line=2.5)
+```
+
+## fm1: 双因子随机截距模型 VS fm0:单因子随机截距模型
+对比发现，fm1显著优于fm.
+```{r }
+fm0 <- lmer(y0~ 1 + (1|cit.fact)  , REML=F)      
+fm1 <- lmer(y0~ 1 + (1|cit.fact) + (1|sch.fact), REML=F)      
+anova(fm0, fm1)
+```
+ 
+## fm2: x0+双因子随机截距模型  
+ 对比发现，fm2要显著优于fm1.
+```{r }
+fm2 <- lmer(y0~ 1 + x0 + (1|sch.fact) + (1|cit.fact), REML=F)                
+anova(fm1,fm2)  
+```
+  
+## 数据: x0+sex.boy+双因子随机截距+双因子随机斜率模型
+```{r }
+y0 <- 53+ 0.5*sex.boy + (50 * city.scores) + (7 * school.scores) + 
+      (3+ 5 * city.scores + 7 * school.scores) * x0  + sigma
+```
+ 
+## fm3  VS  fm4 
+固定+双因子随机截距+双因子随机斜率模型记为fm4.
+对比发现，fm4要显著优于fm3.
+```{r }
+fm3 <- lmer(y0~ 1 + x0 + (1|sch.fact) + (1|cit.fact), REML=F)    
+fm4 <- lmer(y0~ 1 + x0 + (1+ x0|cit.fact) + (1+ x0|sch.fact), REML=F)                
+anova(fm3, fm4)  
+```
+
+## fm5: x0+sex.boy+双因子随机截距+双因子随机斜率模型
+对比发现，fm5要显著优于fm4.
+```{r }
+fm5 <- lmer(y0~ 1 + x0 + sex.boy + (1+ x0|cit.fact) + (1+ x0|sch.fact), REML=F)
+anova(fm4, fm5)  
+```
+
+## summary(fm5)的含义
+```{r}
+summary(fm5)
+```
+固定效应:   
+(当sch.fact和cit.fact的影响力位于平均水平时，得到的模型参数.)  
+Intercept参数为49.212，参数的标准误为13.532;  
+x0参数为2.693，参数的标准误为1.414;  
+sex.boy参数为0.508，参数的标准误为0.031。  
+随机效应:  
+sch.fact和cit.fact分别解释了随机截距的6.997和48.726个残差标准误;  
+sch.fact和cit.fact分别解释了随机斜率的7.071和4.408个残差标准误;  
+未能解释的残差residual为2.989个残差标准误。 
+
+
+
+
+(完)
+
+
